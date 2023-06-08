@@ -1,167 +1,183 @@
-結合openCV+selenium+beatifulreport
-使用工具 (可依據需求進行使用)
-python
-Selenium介紹及應用
-BeautifulReport測試報告介紹及應用
-系統
-Windows
-測試裝置
- 1.桌機
+# KKGame Slot Regression Testing Tool
 
-Selenium介紹及應用
-介紹 : Selenium 是為瀏覽器自動化（Browser Automation）需求所設計的一套工具集合，讓程式可以直接驅動瀏覽器進行各種網站操作。
+- [KKGame Slot Regression Testing Tool](#kkgame-slot-regression-testing-tool)
+  - [Summary](#summary)
+  - [TO DO](#to-do)
+  - [Quick Start](#quick-start)
+    - [安裝 Python Modules](#安裝-python-modules)
+    - [啟動自動化腳本](#啟動自動化腳本)
+  - [Add Tester](#add-tester)
+      - [Step.1 複製範本](#step1-複製範本)
+      - [Step.2-1 修改參數](#step2-1-修改參數)
+      - [Step.2-2 修改流程](#step2-2-修改流程)
+      - [Step.3 添加測試流程](#step3-添加測試流程)
+  - [Project Layout](#project-layout)
+  - [Documentations](#documentations)
+  - [References](#references)
 
+--- 
 
+## Summary
 
-常用語法 : 
+針對 KKGame 老虎機類型遊戲進行畫面評測的自動化整合測試工具  
 
-# 引用webdriver
+---
 
-chrome = webdriver.Chrome(r'webdriver位置', chrome_options=options)
+## TO DO
 
---------------------------------------------------------------------------------------
+基礎框架已經開發完畢，以下是框架未來可以繼續迭代的方向:  
+ - `unittest.TestCase` 抽取成父類別，所有遊戲的測試模組繼承後僅調整需要部分
+ - 驗證內容不僅只包含盤面結果，而是包含動畫特效驗證
+   - `ground_truth` 保存一段長時間影片，驗證過程中錄下轉動過程後與 `ground_truth` 比對匹配程度
+   - i.e. 錄影為子集合，理論上應該要 100% 連續出現在 `ground_truth` 中的某個部分
+ - 測試報告內容擴充
+   - 載入時間紀錄
+   - Console 錯誤訊息紀錄
 
-# 開啟要爬的網址
+---
 
-chrome.get('網址')
+## Quick Start
 
---------------------------------------------------------------------------------------
+### 安裝 Python Modules
 
-# 取得網站的title
+首次下載該專案時，可以執行該指令安裝該專案所需使用到的第三方模組
 
-title = chrome.title
+```shell
+make install_requirements
+```
 
---------------------------------------------------------------------------------------
+### 啟動自動化腳本
 
-# 退出瀏覽器
+執行該指令後，會開始執行老虎機整合測試流程
 
-chrome.quit()
+```shell
+make run
+```
 
---------------------------------------------------------------------------------------
+---
 
-# 應用find_element_by_ 來建立物件
+## Add Tester
 
-user = self.chrome.find_element_by_xpath('xpath')
+新增一款新遊戲測試模組的最小流程，依照各遊戲不同可能還需額外調整  
+這裡只說明最基礎的流程，以新增一款 `G7封神榜` 為例
 
-password = self.chrome.find_element_by_xpath("xpath")
+#### Step.1 複製範本
 
---------------------------------------------------------------------------------------
+複製 `g4_tester.py` 後將檔案更名成 `g7_tester.py`
 
-# 應用send_keys()來模擬使用者輸入的資料
+#### Step.2-1 修改參數
 
-user.send_keys('user')
+打開 `g7_tester.py` 的檔案，在 `setUpClass` 函式裡管理所有測試流程會使用到的基本參數，如下
 
-password.send_keys('password')
+```python
+...
 
---------------------------------------------------------------------------------------
+@classmethod
+def setUpClass(cls):
+  cls.GAME_ID = "4" # 遊戲編號
+  cls.WEBDRIVER_TIMEOUT = 10 # WebDriverWait 的條件等待時間
+  cls.LOADING_DELAY = 5 # 載入等待時間
+  cls.SPIN_DEALY = 5 # 下注表演等待時間
+  cls.PANNEL_HEIGHT_RATIO = (0.39, 0.75) # 老虎機面板範圍 (以百分比表示艱鉅)
+  cls.SIMILARITY = 0.95 # 比對相似度閥值
 
-# click點擊滑鼠
+  cls.chrome = SingletonChromeDriver.get_instance()
+  cls.cheat_table = {
+    "params": {
+      "key": f"{config.KK_ADMIN_USER}-{cls.GAME_ID}", 
+      "data": {
+        "baseGame": [3, 1, 1, 1, 13], 
+        "longWildIndex": -1, 
+        "cheatCase": 0
+      }
+    }
+  }
 
-a.chrome.find_element_by_xpath("xpath")
+...
+```
 
-a.click()
+- `cls.GAME_ID` 改成 `"7"`
+- `cls.PANNEL_HEIGHT_RATIO` 根據不同遊戲的盤面高度不同，需要使用工具確認高度範圍後修改 **(註1)**
+- 其餘參數根據情境而定，可以自行調整
 
---------------------------------------------------------------------------------------
+**註1:**  
 
-# 移動滑鼠座標pyautogui.moveTo
+確認盤面高度範圍可以使用 `image_similarity.py` 裡面的函式 `preview_cropped_image` 來調整並預覽擷取範圍  
+範例如下:
 
-pyautogui.moveTo(x,y)
+```python
+if __name__ == '__main__':
+  image_path = r'./KKGAME_PIC/G7_ground_truth.png'
+  height_range = (0.39, 0.75)
+  width_range = (0, 1)
 
---------------------------------------------------------------------------------------
+  preview_cropped_image(image_path, height_range, width_range)
+```
 
-# 返回上一頁back
+#### Step.2-2 修改流程
 
-chrome.back()
+如果遊戲類型與你想複製的不同 (e.g. 直橫版) 時，可能會遇到自動化流程點擊不到 spin 按鈕的問題  
+這時可以在對應的 `testcase` 內修改操作流程，範例如下:
 
---------------------------------------------------------------------------------------
+```python
+def test_02_open_kkgame(self):
+  
+  ...
 
-# 截取瀏覽器畫面
+  # 點擊 spin
+  spin_x_offset = 0
+  spin_y_offset = (canvas_height/2) - (canvas_height - (canvas_height*0.9))
 
-save_path = os.path.join(os.path.expanduser('~'), "截圖存放路徑", "檔案名稱")
+  actions = ActionChains(self.chrome)
+  actions.move_to_element_with_offset(canvas, spin_x_offset, spin_y_offset).click().perform()
 
-self.chrome.find_element_by_xpath("//div[@id='Cocos2dGameContainer']//canvas[1]").screenshot(save_path)
+  ...
+```
 
-BeautifulReport介紹及應用
-介紹 : 測試用例模板,可以把測試中的結果整合成一個可視化的HTML測試報告
+可以在這個地分調整滑鼠位移的偏移量 *(offset)* 以滿足需求
 
-![image](https://user-images.githubusercontent.com/47851007/187381975-70290dda-ee48-4410-a6f5-100fc24b4109.png)
+#### Step.3 添加測試流程
 
+完成一款遊戲的測試模組 *(unittest.TestCase)* 後，需要把測試模組加入主流程 `slot_testflow.py`  
+請在程式碼內添加你的測試模組，範例如下:  
 
-應用 : 
+```python
+testunit.addTests(unittest.TestLoader().loadTestsFromTestCase(G7Tester))
+```
 
+以上，就是新增一款遊戲測試模組的最小流程
 
+---
 
-filename → 測試報告綁案名稱。
+## Project Layout
 
-description -> 用例名稱。
+```text
+KKGame Slot Regression Testing Tool
+ ├─ BIN/                 # 保存所有可供使用的第三方執行檔
+ ├─ KKGAME_PIC/          # 保存各遊戲用來提供影像辨識比對的圖片 (ground truth)
+ ├─ KKGAME_REPORT/       # 保存每次整合測試的結果報告
+ ├─ .gitignore           #
+ ├─ chrome_driver.py     # Selenium ChromeDriver 單例模式
+ ├─ config.py            # 整合測試時引用的參數檔
+ ├─ g{gameid}_tester.py  # 每款遊戲各自的測試流程
+ ├─ ..                   #
+ ├─ image_similarity.py  # 圖片相似度比對函式庫
+ ├─ makefile             # 
+ ├─ README.md            # 
+ ├─ report_template.py   # 輸出報告使用的 HTML 格式模板
+ ├─ requirements.txt     # 該專案所依賴的 python 第三方模組列表
+ ├─ slot_testflow.py     # 老虎機整合測試流程
+ └─ util.py              # 輔助工具函式庫
+```
 
-1.測試類 : 會依照class名稱來命名。
+---
 
-2.測試方法 : 會依照def名稱來命名，每一個def表是一個測試方法，10個def測試報告就會有10個測試放法。
+## Documentations
 
-3. 用例描述 : 會依照'''XXX'''中內容來命名。
+施工中 ...
 
-'''開啟深海历险'''
+---
 
-4.操作 : 會依照print結果呈現。
+## References
 
-5.報告結果
-![image](https://user-images.githubusercontent.com/47851007/187382085-5340b73f-dc26-4e9c-ac0e-4cb14e5502bd.png)
-
-
-
-
-
-
-
-可能碰到的問題
---------------------------------------------------------------------------------------
-
-Selenium 4.3以上版本
-
-# 應用find_element_by_ 來建立物件，會遇到此用法已無法使用
-
-目前一律都修改為 find_element(byXXXX, 'xx')
-
-需要額外import    from selenium.webdriver.common.by import By
-
-所以會修改為
-
-user = self.chrome.find_element("xpath", "實際的path")
-password = self.chrome.find_element("xpath","實際的path")
-
-
-
---------------------------------------------------------------------------------------
-
-Beatifulreport報告顯示異常
-
-
-
-沒有顯示圖片與結果
-![image](https://user-images.githubusercontent.com/47851007/187382191-032d15a2-73b4-4cf7-9081-913abca3215d.png)
-
-
-
-先前往 C:\Users\XXXX\AppData\Local\Programs\Python\Python39\Lib\site-packages\BeautifulReport\template   進行修正
-
-將檔案template開啟
-
-![image](https://user-images.githubusercontent.com/47851007/187382251-7ba6618f-7037-4de8-8d21-a7150be97b0f.png)
-
-
-
-
-將cdn.bootcss.com修改為cdnjs.cloudflare.com/ajax/libs/
-
-顯示異常主要問題為 cdn網址失效，需要更換一個CDN，更換後重新執行一次測試案例，所產出報告即可正常顯示
-![image](https://user-images.githubusercontent.com/47851007/187382311-a02aabbf-cb65-4311-988c-ec2ec4794738.png)
-
-
-
-
-
-
-
-腳本提供
-執行腳本前需變更webdriver、原圖及截圖存放路徑，且需建立報告及圖片存放的資料夾
+施工中 ...
